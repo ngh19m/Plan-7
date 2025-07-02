@@ -1,1 +1,0 @@
-Plan tháng 7 - AI_Nghiem Quoc Anh
