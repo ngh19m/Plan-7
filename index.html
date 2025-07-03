@@ -267,10 +267,9 @@
             margin: 10px 0;
             overflow: hidden;
         }
-        
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #00b894, #55a3ff);
+            background: linear-gradient(90deg, #00b894, #55a3ff, #4285f4);
             border-radius: 10px;
             transition: width 0.5s ease;
         }
@@ -423,12 +422,29 @@
     </script>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
+    <!-- Login box inside header, right aligned -->
+    <div class="container" style="position:relative;">
+        <div class="header" style="position:relative;">
             <h1>📅 Kế Hoạch Làm Việc Tháng 7/2025</h1>
             <p>Nghiem Quoc Anh - 2151260842</p>
+            <div id="loginBox" style="position:absolute;top:24px;right:8px;z-index:2000;display:flex;align-items:flex-start;flex-direction:column;">
+              <span id="loginStatus" style="font-weight:bold;color:#4285f4;margin-right:10px;display:none;">Xin chào, admin!</span>
+              <button id="showLoginBtn" style="padding:6px 18px;border-radius:8px;border:1px solid #4285f4;background:#fff;color:#4285f4;cursor:pointer;font-weight:500;">Đăng nhập quản trị</button>
+              <form id="loginForm" style="display:none;position:absolute;top:36px;right:0;background:#fff;border:1px solid #dadce0;border-radius:10px;box-shadow:0 4px 16px rgba(66,133,244,0.08);padding:18px 20px;min-width:220px;">
+                <div style="margin-bottom:10px;">
+                  <input id="loginUser" type="text" placeholder="Tài khoản" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #ccc;" autocomplete="username">
+                </div>
+                <div style="margin-bottom:10px;">
+                  <input id="loginPass" type="password" placeholder="Mật khẩu" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid #ccc;" autocomplete="current-password">
+                </div>
+                <div style="text-align:right;">
+                  <button type="submit" style="padding:6px 16px;border-radius:6px;border:none;background:#4285f4;color:#fff;font-weight:500;">Đăng nhập</button>
+                  <button type="button" id="closeLoginBtn" style="margin-left:8px;padding:6px 12px;border-radius:6px;border:none;background:#eee;color:#333;">Hủy</button>
+                </div>
+                <div id="loginError" style="color:#d63031;font-size:0.95em;margin-top:8px;display:none;"></div>
+              </form>
+            </div>
         </div>
-        
         <div class="tabs">
             <div class="tab active" onclick="showTab('dashboard')">📊 Dashboard</div>
             <div class="tab" onclick="showTab('calendar')">📅 Lịch tháng</div>
@@ -458,13 +474,47 @@
                     </div>
                 </div>
                 
-                <div class="weekly-focus">
-                    <h3>🎯 Trọng tâm tuần này (1-7/7)</h3>
-                    <div class="focus-item">Hoàn thành báo cáo Q2 và chuẩn bị presentation</div>
-                    <div class="focus-item">Kickoff dự án marketing campaign mới</div>
-                    <div class="focus-item">Review và optimize quy trình làm việc team</div>
-                    <div class="focus-item">Học khóa online về Data Analytics</div>
+                <div class="weekly-focus" id="dashboardWeeklyFocus">
+                    <h3>🎯 Trọng tâm từng tuần</h3>
+                    <div id="dashboardWeeklyFocusList"></div>
                 </div>
+    <script>
+    // Render weekly main goals in dashboard
+    function renderDashboardWeeklyFocus() {
+      const focusList = document.getElementById('dashboardWeeklyFocusList');
+      if (!focusList) return;
+      // Get weeklyTasks from localStorage or default
+      let weeklyTasks = [];
+      try {
+        const data = localStorage.getItem('plan7-weekly-tasks');
+        if (data) weeklyTasks = JSON.parse(data);
+      } catch(e) {}
+      if (!weeklyTasks || !Array.isArray(weeklyTasks) || weeklyTasks.length === 0) {
+        focusList.innerHTML = '<div style="color:#888;">Chưa có mục tiêu tuần nào.</div>';
+        return;
+      }
+      focusList.innerHTML = weeklyTasks.map((t, i) => {
+        // Allow multi-line goals as list
+        const goals = (t.goal||'').split('\n').map(g => `<li>${g}</li>`).join('');
+        return `<div class="focus-item"><b>${t.week}:</b><ul style="margin:4px 0 0 18px;">${goals}</ul></div>`;
+      }).join('');
+    }
+    document.addEventListener('DOMContentLoaded', renderDashboardWeeklyFocus);
+    // Also update when weekly tasks change
+    window.renderDashboardWeeklyFocus = renderDashboardWeeklyFocus;
+    // Patch weekly task save to update dashboard
+    const origSaveWeeklyTasks = window.saveWeeklyTasks;
+    window.saveWeeklyTasks = function() {
+      origSaveWeeklyTasks.apply(this, arguments);
+      renderDashboardWeeklyFocus();
+    };
+    // Patch weekly task render to update dashboard (for edit/delete)
+    const origRenderWeeklyTasks = window.renderWeeklyTasks;
+    window.renderWeeklyTasks = function() {
+      origRenderWeeklyTasks.apply(this, arguments);
+      renderDashboardWeeklyFocus();
+    };
+    </script>
                 
                 <h3>📈 Tiến độ các dự án chính</h3>
                 <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -547,64 +597,205 @@
         <div id="weekly" class="tab-content">
             <div class="schedule-table">
                 <h2>📋 Kế hoạch theo tuần</h2>
+                <button class="add-task-btn" id="addWeekTaskBtn" style="margin-bottom:12px;display:none;">+ Thêm công việc tuần</button>
                 <div class="table-container">
-                    <table>
+                    <table id="weeklyTaskTable">
                         <thead>
                             <tr>
                                 <th>Tuần</th>
                                 <th>Mục tiêu chính</th>
-                                <th>Các milestone</th>
+                                <th>Các Subtask</th>
                                 <th>Deadline quan trọng</th>
                                 <th>Output dự kiến</th>
+                                <th id="weeklyActionHeader" style="display:none;">Thao tác</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr>
-                                <td><strong>Tuần 1<br>(1-4/7)</strong></td>
-                                <td>Hoàn thành báo cáo Q2 và kickoff dự án mới</td>
-                                <td>• Review tất cả số liệu Q2<br>• Chuẩn bị presentation<br>• Meeting với stakeholders</td>
-                                <td><span class="priority-high">4/7: Nộp báo cáo Q2</span></td>
-                                <td><div class="progress-bar"><div class="progress-fill" style="width: 85%"></div></div>85%</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Tuần 2<br>(7-11/7)</strong></td>
-                                <td>Phát triển và test tính năng mới</td>
-                                <td>• Sprint planning<br>• Development phase<br>• Internal testing</td>
-                                <td><span class="priority-medium">11/7: Feature demo</span></td>
-                                <td><div class="progress-bar"><div class="progress-fill" style="width: 60%"></div></div>60%</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Tuần 3<br>(14-18/7)</strong></td>
-                                <td>Quarterly review và strategy planning</td>
-                                <td>• Phân tích performance<br>• Strategic planning session<br>• Team alignment</td>
-                                <td><span class="priority-high">15/7: Quarterly review</span></td>
-                                <td><div class="progress-bar"><div class="progress-fill" style="width: 40%"></div></div>40%</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Tuần 4<br>(21-25/7)</strong></td>
-                                <td>Product launch và market analysis</td>
-                                <td>• Go-to-market execution<br>• Customer feedback collection<br>• Performance monitoring</td>
-                                <td><span class="priority-high">22/7: Product launch</span></td>
-                                <td><div class="progress-bar"><div class="progress-fill" style="width: 20%"></div></div>20%</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Tuần 5<br>(28-31/7)</strong></td>
-                                <td>Tổng kết tháng và chuẩn bị tháng 8</td>
-                                <td>• Month-end review<br>• Planning for August<br>• Documentation update</td>
-                                <td><span class="priority-medium">31/7: Monthly report</span></td>
-                                <td><div class="progress-bar"><div class="progress-fill" style="width: 10%"></div></div>10%</td>
-                            </tr>
+                        <tbody id="weeklyTaskTbody">
                         </tbody>
                     </table>
                 </div>
+                <!-- Dialog for adding/editing a weekly task -->
+                <div id="weekTaskDialog" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:1000; align-items:center; justify-content:center;">
+                  <div style="background:white; border-radius:12px; padding:32px 24px; min-width:320px; max-width:90vw; box-shadow:0 8px 32px rgba(0,0,0,0.18); position:relative;">
+                    <h3 style="margin-bottom:18px;">Thêm/Sửa công việc tuần</h3>
+                    <form id="weekTaskForm">
+                      <div style="margin-bottom:12px;">
+                        <label>Tuần: <input type="text" id="weekName" required style="padding:4px 8px; border-radius:6px; border:1px solid #ccc; width:120px;"></label>
+                      </div>
+                      <div style="margin-bottom:12px;">
+                        <label>Mục tiêu chính:<br>
+                          <textarea id="weekGoal" required rows="2" style="width:100%;padding:4px 8px; border-radius:6px; border:1px solid #ccc;"></textarea>
+                        </label>
+                        <div style="font-size:0.95em;color:#888;margin-top:4px;">(Mỗi mục tiêu 1 dòng)</div>
+                      </div>
+                      <div style="margin-bottom:12px;">
+                        <label>Các Subtask:<br><textarea id="weekSubtask" rows="2" style="width:100%;padding:4px 8px; border-radius:6px; border:1px solid #ccc;"></textarea></label>
+                      </div>
+                      <div style="margin-bottom:12px;">
+                        <label>Deadline quan trọng: <input type="text" id="weekDeadline" style="padding:4px 8px; border-radius:6px; border:1px solid #ccc; width:180px;"></label>
+                      </div>
+                      <div style="margin-bottom:12px;">
+                        <label>Output dự kiến:<br>
+                          <textarea id="weekOutput" rows="2" style="width:100%;padding:4px 8px; border-radius:6px; border:1px solid #ccc;"></textarea>
+                        </label>
+                        <div style="font-size:0.95em;color:#888;margin-top:4px;">(Mỗi output 1 dòng, có thể nhập nhiều dòng)</div>
+                        <label style="display:block;margin-top:8px;">% Hoàn thành:
+                          <input type="number" id="weekOutputPercent" min="0" max="100" placeholder="%" style="width:60px; margin-left:8px; padding:4px 8px; border-radius:6px; border:1px solid #ccc;">
+                        </label>
+                      </div>
+                      <div style="text-align:right;">
+                        <button type="button" onclick="closeWeekTaskDialog()" style="margin-right:10px; padding:8px 18px; border-radius:8px; border:none; background:#eee; color:#333; cursor:pointer;">Hủy</button>
+                        <button type="submit" style="padding:8px 18px; border-radius:8px; border:none; background:linear-gradient(135deg, #667eea, #764ba2); color:white; cursor:pointer;">Lưu</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
             </div>
+    <script>
+    // --- Weekly Task Data ---
+    const WEEKLY_TASKS_KEY = 'plan7-weekly-tasks';
+    function loadWeeklyTasks() {
+      try {
+        const data = localStorage.getItem(WEEKLY_TASKS_KEY);
+        if (data) return JSON.parse(data);
+      } catch(e) {}
+      // Default demo data
+      return [
+        {week: 'Tuần 1 (1-4/7)', goal: 'Hoàn thành báo cáo Q2 và kickoff dự án mới', Subtask: '• Review tất cả số liệu Q2\n• Chuẩn bị presentation\n• Meeting với stakeholders', deadline: '4/7: Nộp báo cáo Q2', deadlineClass: 'priority-high', output: 'Báo cáo Q2', outputPercent: 85},
+        {week: 'Tuần 2 (7-11/7)', goal: 'Phát triển và test tính năng mới', Subtask: '• Sprint planning\n• Development phase\n• Internal testing', deadline: '11/7: Feature demo', deadlineClass: 'priority-medium', output: 'Demo tính năng', outputPercent: 60},
+        {week: 'Tuần 3 (14-18/7)', goal: 'Quarterly review và strategy planning', Subtask: '• Phân tích performance\n• Strategic planning session\n• Team alignment', deadline: '15/7: Quarterly review', deadlineClass: 'priority-high', output: 'Review & Strategy', outputPercent: 40},
+        {week: 'Tuần 4 (21-25/7)', goal: 'Product launch và market analysis', Subtask: '• Go-to-market execution\n• Customer feedback collection\n• Performance monitoring', deadline: '22/7: Product launch', deadlineClass: 'priority-high', output: 'Product Launch', outputPercent: 20},
+        {week: 'Tuần 5 (28-31/7)', goal: 'Tổng kết tháng và chuẩn bị tháng 8', Subtask: '• Month-end review\n• Planning for August\n• Documentation update', deadline: '31/7: Monthly report', deadlineClass: 'priority-medium', output: 'Báo cáo tháng', outputPercent: 10}
+      ];
+    }
+    function saveWeeklyTasks() {
+      localStorage.setItem(WEEKLY_TASKS_KEY, JSON.stringify(weeklyTasks));
+    }
+    let weeklyTasks = loadWeeklyTasks();
+    let editingWeekTaskIdx = null;
+    function renderWeeklyTasks() {
+      const tbody = document.getElementById('weeklyTaskTbody');
+      tbody.innerHTML = '';
+      weeklyTasks.forEach((t, idx) => {
+        let tr = document.createElement('tr');
+        tr.innerHTML =
+          `<td><strong>${t.week}</strong></td>`+
+          `<td style="white-space:pre-line;">${t.goal}</td>`+
+          `<td style="white-space:pre-line;">${t.Subtask}</td>`+
+          `<td><span class="${t.deadlineClass||''}">${t.deadline}</span></td>`+
+          `<td style="min-width:120px;white-space:pre-line;">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div>${(t.output||'').split('\n').map(line => `<div>${line}</div>`).join('')}</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div class="progress-bar" style="flex:1;min-width:60px;max-width:90px;height:10px;margin:0;background:#e0e0e0;border-radius:10px;overflow:hidden;">
+                  <div class="progress-fill" style="width:${t.outputPercent||0}%;height:100%;background:linear-gradient(90deg,#00b894,#55a3ff,#4285f4);border-radius:10px;transition:width 0.5s;"></div>
+                </div>
+                <span style="font-size:0.95em;font-weight:bold;min-width:32px;">${t.outputPercent||0}%</span>
+              </div>
+            </div>
+          </td>`;
+        if (window.isOwner) {
+          tr.innerHTML += `<td style="vertical-align:top;white-space:nowrap;">
+            <button class="edit-week-task-btn" data-idx="${idx}" style="margin-bottom:4px;padding:4px 12px;border-radius:6px;border:1px solid #4285f4;background:#e3f2fd;color:#4285f4;cursor:pointer;display:block;width:48px;">sửa</button>
+            <button class="delete-week-task-btn" data-idx="${idx}" style="padding:4px 12px;border-radius:6px;border:1px solid #f44336;background:#ffebee;color:#f44336;cursor:pointer;display:block;width:48px;">xóa</button>
+          </td>`;
+        }
+        tbody.appendChild(tr);
+      });
+      // Show/hide action header
+      document.getElementById('weeklyActionHeader').style.display = window.isOwner ? '' : 'none';
+      // Add event listeners
+      if (window.isOwner) {
+        setTimeout(() => {
+          document.querySelectorAll('.delete-week-task-btn').forEach(btn => {
+            btn.onclick = function() {
+              const idx = parseInt(this.getAttribute('data-idx'));
+              if (confirm('Bạn có chắc muốn xóa công việc tuần này?')) {
+                weeklyTasks.splice(idx, 1);
+                saveWeeklyTasks();
+                renderWeeklyTasks();
+              }
+            };
+          });
+          document.querySelectorAll('.edit-week-task-btn').forEach(btn => {
+            btn.onclick = function() {
+              const idx = parseInt(this.getAttribute('data-idx'));
+              openWeekTaskDialog(idx);
+            };
+          });
+        }, 100);
+      }
+    }
+    function openWeekTaskDialog(idx) {
+      document.getElementById('weekTaskDialog').style.display = 'flex';
+      if (typeof idx === 'number') {
+        editingWeekTaskIdx = idx;
+        const t = weeklyTasks[idx];
+        document.getElementById('weekName').value = t.week;
+        document.getElementById('weekGoal').value = t.goal;
+        document.getElementById('weekSubtask').value = t.Subtask;
+        document.getElementById('weekDeadline').value = t.deadline;
+        document.getElementById('weekOutput').value = t.output;
+        document.getElementById('weekOutputPercent').value = t.outputPercent;
+      } else {
+        editingWeekTaskIdx = null;
+        document.getElementById('weekTaskForm').reset();
+      }
+    }
+    function closeWeekTaskDialog() {
+      document.getElementById('weekTaskDialog').style.display = 'none';
+      document.getElementById('weekTaskForm').reset();
+      editingWeekTaskIdx = null;
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      // Show add button if owner
+      function updateAddWeekBtn() {
+        const btn = document.getElementById('addWeekTaskBtn');
+        if (btn) btn.style.display = window.isOwner ? '' : 'none';
+      }
+      updateAddWeekBtn();
+      renderWeeklyTasks();
+      document.getElementById('addWeekTaskBtn').onclick = function() {
+        openWeekTaskDialog();
+      };
+      document.getElementById('weekTaskForm').onsubmit = function(e) {
+        e.preventDefault();
+        const week = document.getElementById('weekName').value;
+        const goal = document.getElementById('weekGoal').value;
+        const Subtask = document.getElementById('weekSubtask').value;
+        const deadline = document.getElementById('weekDeadline').value;
+        const output = document.getElementById('weekOutput').value;
+        const outputPercent = parseInt(document.getElementById('weekOutputPercent').value) || 0;
+        // Deadline class auto
+        let deadlineClass = '';
+        if (/high|q2|launch|review/i.test(deadline)) deadlineClass = 'priority-high';
+        else if (/medium|demo|report/i.test(deadline)) deadlineClass = 'priority-medium';
+        else deadlineClass = '';
+        const task = {week, goal, Subtask, deadline, deadlineClass, output, outputPercent};
+        if (editingWeekTaskIdx !== null) {
+          weeklyTasks[editingWeekTaskIdx] = task;
+        } else {
+          weeklyTasks.push(task);
+        }
+        saveWeeklyTasks();
+        renderWeeklyTasks();
+        closeWeekTaskDialog();
+      };
+      // Hide dialog on outside click
+      document.getElementById('weekTaskDialog').addEventListener('click', function(e) {
+        if (e.target === this) closeWeekTaskDialog();
+      });
+    });
+    // Update weekly table when login state changes
+    window.renderWeeklyTasks = renderWeeklyTasks;
+    </script>
         </div>
         
         <!-- Daily Tab -->
         <div id="daily" class="tab-content">
             <div class="schedule-table">
                 <h2>⏰ Lịch trình chi tiết theo ngày</h2>
-                <button class="add-task-btn" onclick="openTaskDialog()">+ Thêm công việc mới</button>
+                <button class="add-task-btn" id="addTaskBtn" onclick="openTaskDialog()">+ Thêm công việc mới</button>
                 <div class="table-container">
                     <table id="dailyTaskTable">
                         <thead>
@@ -701,14 +892,17 @@
     }
     let tasks = loadTasks();
 
-    function renderDailyTasks() {
+let isOwner = false;
+window.isOwner = isOwner;
+function renderDailyTasks() {
       const tbody = document.getElementById('dailyTaskTbody');
       tbody.innerHTML = '';
       // Group by date
       let grouped = {};
-      tasks.forEach(t => {
+      tasks.forEach((t, idx) => {
         if (!grouped[t.date]) grouped[t.date] = [];
-        grouped[t.date].push(t);
+        // Store original index for edit/delete
+        grouped[t.date].push({ ...t, _idx: idx });
       });
       // Sort by date
       let dates = Object.keys(grouped).sort();
@@ -729,9 +923,37 @@
             `<td>${t.duration}</td>`+
             `<td><span class="${t.status}">${t.status.replace('status-','').replace('-',' ')}</span></td>`+
             `<td>${t.note}</td>`;
+          if (isOwner) {
+            tr.innerHTML += `<td style="white-space:nowrap;">
+                <button class="edit-task-btn" data-idx="${t._idx}" style="margin-right:4px; padding:4px 10px; border-radius:6px; border:1px solid #4285f4; background:#e3f2fd; color:#4285f4; cursor:pointer;">Sửa</button>
+                <button class="delete-task-btn" data-idx="${t._idx}" style="padding:4px 10px; border-radius:6px; border:1px solid #f44336; background:#ffebee; color:#f44336; cursor:pointer;">Xóa</button>
+            </td>`;
+          }
           tbody.appendChild(tr);
         });
       });
+      // Add event listeners for edit/delete buttons
+      if (isOwner) {
+        setTimeout(() => {
+          document.querySelectorAll('.delete-task-btn').forEach(btn => {
+            btn.onclick = function() {
+              const idx = parseInt(this.getAttribute('data-idx'));
+              if (confirm('Bạn có chắc muốn xóa công việc này?')) {
+                tasks.splice(idx, 1);
+                saveTasks();
+                renderDailyTasks();
+                updateDashboard();
+              }
+            };
+          });
+          document.querySelectorAll('.edit-task-btn').forEach(btn => {
+            btn.onclick = function() {
+              const idx = parseInt(this.getAttribute('data-idx'));
+              openTaskDialog(idx);
+            };
+          });
+        }, 100);
+      }
       // Trigger calendar update after rendering daily tasks
       if (typeof renderCalendarTasks === 'function') renderCalendarTasks();
     }
@@ -752,17 +974,76 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+      // Hide add button if not owner
+      function updateAddBtn() {
+        const btn = document.getElementById('addTaskBtn');
+        if (btn) btn.style.display = isOwner ? '' : 'none';
+      }
+      updateAddBtn();
       renderDailyTasks();
       updateDashboard();
+      // Login logic
+      const showLoginBtn = document.getElementById('showLoginBtn');
+      const loginForm = document.getElementById('loginForm');
+      const closeLoginBtn = document.getElementById('closeLoginBtn');
+      const loginStatus = document.getElementById('loginStatus');
+      const loginError = document.getElementById('loginError');
+      showLoginBtn.onclick = function() {
+        loginForm.style.display = 'block';
+        loginError.style.display = 'none';
+      };
+      closeLoginBtn.onclick = function() {
+        loginForm.style.display = 'none';
+        loginError.style.display = 'none';
+      };
+      loginForm.onsubmit = function(e) {
+        e.preventDefault();
+        const user = document.getElementById('loginUser').value.trim();
+        const pass = document.getElementById('loginPass').value;
+        if (user === 'admin' && pass === '1911') {
+          isOwner = true;
+          window.isOwner = true;
+          loginForm.style.display = 'none';
+          showLoginBtn.style.display = 'none';
+          loginStatus.style.display = 'inline-block';
+          loginError.style.display = 'none';
+          renderDailyTasks();
+          updateAddBtn();
+          if (typeof renderWeeklyTasks === 'function') renderWeeklyTasks();
+        } else {
+          loginError.textContent = 'Sai tài khoản hoặc mật khẩu!';
+          loginError.style.display = 'block';
+        }
+// Ensure weekly tab updates when logout (if you add logout logic in future)
+// window.isOwner = isOwner; // keep in sync if needed
+      };
     });
 
     // Dialog logic for adding a new task
-    function openTaskDialog() {
+    let editingTaskIdx = null;
+    function openTaskDialog(idx) {
         document.getElementById('taskDialog').style.display = 'flex';
+        if (typeof idx === 'number') {
+            // Edit mode: fill form with task data
+            editingTaskIdx = idx;
+            const t = tasks[idx];
+            document.getElementById('taskDate').value = t.date;
+            document.getElementById('taskTime').value = t.time;
+            document.getElementById('taskName').value = t.name;
+            document.getElementById('taskType').value = t.type;
+            document.getElementById('taskPriority').value = t.priority;
+            document.getElementById('taskDuration').value = t.duration;
+            document.getElementById('taskStatus').value = t.status;
+            document.getElementById('taskNote').value = t.note;
+        } else {
+            editingTaskIdx = null;
+            document.getElementById('taskForm').reset();
+        }
     }
     function closeTaskDialog() {
         document.getElementById('taskDialog').style.display = 'none';
         document.getElementById('taskForm').reset();
+        editingTaskIdx = null;
     }
     // Add task to table and update dashboard
     document.addEventListener('DOMContentLoaded', function() {
@@ -777,7 +1058,13 @@
             const duration = document.getElementById('taskDuration').value;
             const status = document.getElementById('taskStatus').value;
             const note = document.getElementById('taskNote').value;
-            tasks.push({date, time, name, type, priority, duration, status, note});
+            if (editingTaskIdx !== null) {
+                // Edit mode
+                tasks[editingTaskIdx] = {date, time, name, type, priority, duration, status, note};
+            } else {
+                // Add mode
+                tasks.push({date, time, name, type, priority, duration, status, note});
+            }
             saveTasks();
             renderDailyTasks();
             updateDashboard();
@@ -808,9 +1095,7 @@
                 cell.onmouseenter = () => cell.style.outline = '2px solid #4285f4';
                 cell.onmouseleave = () => cell.style.outline = '';
                 cell.onclick = () => {
-                  // Set date in dialog
                   document.getElementById('taskDate').value = `2025-07-${day.toString().padStart(2,'0')}`;
-                  // Switch back to daily tab and focus time input
                   showTab('daily');
                   setTimeout(() => document.getElementById('taskTime').focus(), 200);
                 };
